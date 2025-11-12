@@ -1,17 +1,19 @@
-from player import Player
+import datetime
 
-class Game:
-    def __init__(self, code):
-        self.code = code
-        self.players = []
-        self.existing_player_names = set()
+from redis_om import Field, HashModel
+from typing import Literal
+from .redis import redis
+from datetime import datetime, timezone
 
-    def add_player(self, player_name):
-        """ Creates and adds a new player with unique name """
-        normalized_name = player_name.lower()
-        if normalized_name in self.existing_player_names:
-            raise ValueError(f"A player with the name {player_name} already exists")
-        player = Player(player_name)
-        self.players.append(player)
-        self.existing_player_names.add(normalized_name)
-        return player
+class Game(HashModel):
+    game_code: str = Field(index=True)
+    current_round_duration: int = Field(ge=360, le=720)
+    status: Literal['game', 'lobby'] = Field(default='lobby')
+    current_location: str
+    game_owner: str = Field(index=True)  # References Player.pk
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+    class Meta:
+        database = redis
+        global_key_prefix = "spyfall"
+        model_key_prefix = "game"
