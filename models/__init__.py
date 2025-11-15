@@ -1,2 +1,2 @@
-from .game import Game
-from .player import Player
+from .Game import Game
+from .Player import Player

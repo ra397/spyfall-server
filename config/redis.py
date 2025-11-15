@@ -5,8 +5,9 @@ from redis_om import get_redis_connection
 load_dotenv()
 
 # Redis connection
+redis_host = os.getenv("REDIS_HOST")
 redis = get_redis_connection(
-    url=os.getenv("REDIS_HOST"),
+    url=redis_host,
     decode_responses=True
 )
 
