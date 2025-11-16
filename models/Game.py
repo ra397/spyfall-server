@@ -1,8 +1,10 @@
 import datetime
+import random
+import string
 from redis_om import Field, HashModel
 from typing import Literal
 from datetime import datetime, timezone
-from BaseModel import BaseModel
+from models.BaseModel import BaseModel
 
 class Game(BaseModel):
     game_code: str = Field(index=True)
@@ -11,6 +13,10 @@ class Game(BaseModel):
     current_location: str
     game_owner: str = Field(index=True)  # References Player.pk
     last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+    @staticmethod
+    def generate_game_code() -> str:
+        return ''.join(random.choices(string.ascii_uppercase, k=5))
 
     class Meta:
         model_key_prefix = "game"

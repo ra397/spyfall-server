@@ -10,7 +10,3 @@ redis = get_redis_connection(
     url=redis_host,
     decode_responses=True
 )
-
-# Validate connection
-if redis.ping():
-    print("Redis connected successfully")
