@@ -24,6 +24,13 @@ def test_connect():
 def create_game(json_data):
     sid = request.sid
     player_name = json_data['player_name']
+
+    if len(player_name) < 2 or len(player_name) > 12:
+        return {
+            "status": "error",
+            "message": "Name must be between 2 and 12 characters long."
+        }
+
     uid = str(uuid.uuid4())
     game_code = Game.generate_game_code()
 
@@ -51,29 +58,49 @@ def create_game(json_data):
     join_room(game_code)
 
     return {
+        "status": "success",
         'uid': uid,
         'game_code': game_code,
         'game_owner': True,
+        'players': [player_name],
     }
 
 @socketio.on('join_game')
 def join_game(json_data):
     sid = request.sid
-    game_code = json_data['game_code']
     player_name = json_data['player_name']
+    game_code = json_data['game_code']
+
+    # TODO: validate length of player name
+    if len(player_name) < 2 or len(player_name) > 12:
+        return {
+            "status": "error",
+            "message": "Name must be between 2 and 12 characters long."
+        }
+
     uid = str(uuid.uuid4())
 
     game = Game.find(Game.game_code == game_code).first()
     if game is None:
-        return
+        return {
+            "status": "error",
+            "message": "Game does not exist."
+        }
+
     players = Player.find(Player.game_id == game.pk).all()
     player_names = [player.player_name for player in players]
 
     if len(player_names) >= 8:
-        return None
+        return {
+            "status": "error",
+            "message": "Game is already full."
+        }
 
     if player_name in player_names:
-        return None
+        return {
+            "status": "error",
+            "message": "Player name is already in use."
+        }
 
     player = Player(
         player_name=player_name,
@@ -94,9 +121,11 @@ def join_game(json_data):
     }, room=game_code)
 
     return {
+        "status": "success",
         'uid': uid,
         'game_code': game_code,
         'game_owner': False,
+        'players': player_names,
     }
 
 if __name__ == '__main__':
