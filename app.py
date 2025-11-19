@@ -6,6 +6,9 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, join_room, emit
 import uuid
 
+from helper.spyfall_locations import spyfall_locations
+import random
+
 from config.redis import redis_host
 from models import *
 from redis_om import Migrator
@@ -126,6 +129,74 @@ def join_game(json_data):
         'game_code': game_code,
         'game_owner': False,
         'players': player_names,
+    }
+
+@socketio.on('start_round')
+def start_round(json_data):
+    request_uid = json_data['uid']
+    game_duration = json_data['duration']
+
+    requesting_player = Player.find(Player.uid == request_uid).first()
+    if requesting_player is None:
+        return {
+            "status": "error",
+            "message": "Player does not exist."
+        }
+    game_id = requesting_player.game_id
+
+    players_in_game = Player.find(Player.game_id == game_id).all()
+    if not (3 <= len(players_in_game) <= 8):
+        return {
+            "status": "error",
+            "message": "Not enough players in game."
+        }
+
+    game = Game.get(game_id)
+    if not game:
+        return {
+            "status": "error",
+            "message": "Game does not exist."
+        }
+
+    # choose random location
+    location = random.choice(list(spyfall_locations.keys()))
+    occupations = spyfall_locations[location][:]
+
+    game.current_location = location
+    game.current_round_duration = game_duration
+    game.save()
+
+    spy = random.choice(players_in_game)
+
+    for player in players_in_game:
+        if player.pk == spy.pk:
+            # spy gets no location info
+            player.current_occupation = "SPY"
+        else:
+            if not occupations:
+                # fallback if job list too small
+                player.current_occupation = "Civilian"
+            else:
+                player.current_occupation = occupations.pop(random.randrange(len(occupations)))
+        player.save()
+
+    for player in players_in_game:
+        if player.pk == spy.pk:
+            # Spy receives no location
+            emit('round_started', {
+                "location": "UNKNOWN",
+                "occupation": "SPY",
+                "duration": game_duration
+            }, to=player.socket_id)
+        else:
+            emit('round_started', {
+                "location": location,
+                "occupation": player.current_occupation,
+                "duration": game_duration
+            }, to=player.socket_id)
+
+    return {
+        "status": "success"
     }
 
 if __name__ == '__main__':
