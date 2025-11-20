@@ -11,6 +11,7 @@ import random
 
 from config.redis import redis_host
 from models import *
+from redis_om.model.model import NotFoundError
 from redis_om import Migrator
 
 Migrator().run()
@@ -72,7 +73,7 @@ def create_game(json_data):
 def join_game(json_data):
     sid = request.sid
     player_name = json_data['player_name']
-    game_code = json_data['game_code']
+    game_code = json_data['game_code'].upper()
 
     # TODO: validate length of player name
     if len(player_name) < 2 or len(player_name) > 12:
@@ -83,8 +84,14 @@ def join_game(json_data):
 
     uid = str(uuid.uuid4())
 
-    game = Game.find(Game.game_code == game_code).first()
-    if game is None:
+    if not game_code or len(game_code) != 5:
+        return {
+            "status": "error",
+            "message": "Invalid game code."
+        }
+    try:
+        game = Game.find(Game.game_code == game_code).first()
+    except NotFoundError:
         return {
             "status": "error",
             "message": "Game does not exist."
@@ -164,6 +171,7 @@ def start_round(json_data):
 
     game.current_location = location
     game.current_round_duration = game_duration
+    game.status = 'game'
     game.save()
 
     spy = random.choice(players_in_game)
@@ -194,6 +202,40 @@ def start_round(json_data):
                 "occupation": player.current_occupation,
                 "duration": game_duration
             }, to=player.socket_id)
+
+    return {
+        "status": "success"
+    }
+
+@socketio.on('end_round')
+def end_round(json_data):
+    request_uid = json_data['uid']
+
+    requesting_player = Player.find(Player.uid == request_uid).first()
+    if requesting_player is None:
+        return {
+            "status": "error",
+            "message": "Player does not exist."
+        }
+    game_id = requesting_player.game_id
+
+    game = Game.get(game_id)
+    if not game:
+        return {
+            "status": "error",
+            "message": "Game does not exist."
+        }
+
+    game.current_location = ''
+    game.status = 'lobby'
+    game.save()
+
+    players_in_game = Player.find(Player.game_id == game_id).all()
+    for player in players_in_game:
+        player.current_occupation = ''
+        player.save()
+
+    emit('round_ended', room=game.game_code)
 
     return {
         "status": "success"
